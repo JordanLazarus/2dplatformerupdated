@@ -1,212 +1,121 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Security.Cryptography;
-using System.Threading;
+﻿using UnityEngine;
+using System.Collections;
 using UnityEngine;
+using System.Security.Cryptography;
 
-public class Player : MonoBehaviour {
+public class Player : MonoBehaviour
+{
 
-    public float jumpVelocity;
-    public Vector2 velocity;
-    public float gravity;
-    public LayerMask wallMask;
-    public LayerMask floorMask;
+    public float speed;
+    RigidBody2D rb;
+    bool facingRight = true;
+    bool isGrounded;
+    public Transform groundCheck;
+    public float checkRadius;
+    public LayerMask whatisGround;
+    public float jumpForce;
+    
+    bool isTouchingFront;
+    public Transform frontCheck;
+    bool wallSliding;
+    public float wallSlidingSpeed;
 
-    // Set the variables for movement
-    private bool walk, walk_left, walk_right, jump;
+    bool wallJumping;
+    public float xWallForce;
+    public float yWallForce;
+    public float wallJumpTime;
+    public Animator anim;
 
-    public enum PlayerState {
-        jumping,
-        idle,
-        walking
-    }
 
-    private PlayerState playerState = PlayerState.idle;
+    //double jump
+    bool doubleJump = false;
 
-    private bool grounded = false;
+    // Use this for initialization
+    void Start()
+    {
 
-    // Start is called before the first frame update
-    void Start() {
-
-        Fall();
+        anim = GetComponent<Animator>();
     }
 
     // Update is called once per frame
-    void Update() {
+    void FixedUpdate()
+    {
 
-        CheckPlayerInput ();
+        // The player is grounded if a linecast to the groundcheck position hits anything on the ground layer.
+        grounded = Physics2D.OverlapCircle(groundCheck.position, groundRadius, whatIsGround);
+        touchingWall = Physics2D.OverlapCircle(wallCheck.position, wallTouchRadius, whatIsWall);
+        anim.SetBool("Ground", grounded);
 
-        UpdatePlayerPosition ();        
+        if (grounded)
+        {
+            doubleJump = false;
+        }
+
+        if (touchingWall)
+        {
+            grounded = false;
+            doubleJump = false;
+        }
+
+        anim.SetFloat("vSpeed", rigidbody2D.velocity.y);
+
+
+
+        float move = Input.GetAxis("Horizontal");
+
+        anim.SetFloat("Speed", Mathf.Abs(move));
+
+        rigidbody2D.velocity = new Vector2(move * maxSpeed, rigidbody2D.velocity.y);
+
+        // If the input is moving the player right and the player is facing left...
+        if (move > 0 && !facingRight)
+        {
+            // ... flip the player.
+            Flip();
+        }// Otherwise if the input is moving the player left and the player is facing right...
+        else if (move < 0 && facingRight)
+        {
+            // ... flip the player.
+            Flip();
+        }
     }
+    void Update()
+    {
 
-    void UpdatePlayerPosition () {
+        // If the jump button is pressed and the player is grounded then the player should jump.
+        if ((grounded || !doubleJump) && Input.GetButtonDown("Jump"))
+        {
+            anim.SetBool("Ground", false);
+            rigidbody2D.AddForce(new Vector2(0, jumpForce));
 
-        Vector3 pos = transform.localPosition;
-        Vector3 scale = transform.localScale;
-
-        if (walk) {
-
-            if (walk_left) {
-
-                pos.x -= velocity.x * Time.deltaTime;
-
-                scale.x = -1;
-            }
-
-            if (walk_right) {
-
-                pos.x += velocity.x * Time.deltaTime;
-
-                scale.x = 1;
-            }
-
-            pos = CheckWallRays(pos, scale.x);
-        }
-
-        if (jump && playerState != PlayerState.jumping) {
-
-            playerState = PlayerState.jumping;
-
-            velocity = new Vector2(velocity.x, jumpVelocity);
-        }
-
-        if (playerState == PlayerState.jumping) {
-            
-            pos.y += velocity.y * Time.deltaTime;
-
-            velocity.y -= gravity * Time.deltaTime;
-        }
-
-        if (velocity.y <= 0)
-            pos = CheckFloorRays(pos);
-
-        if (velocity.y >= 0)
-            pos = CheckCeilingRays(pos);
-
-        transform.localPosition = pos;
-        transform.localScale = scale;
-    }
-    
-    void CheckPlayerInput () {
-
-        bool input_left = Input.GetKey(KeyCode.LeftArrow);
-        bool input_right = Input.GetKey(KeyCode.RightArrow);
-        bool input_up = Input.GetKey(KeyCode.Space);
-
-        walk = input_left || input_right;
-
-        walk_left = input_left && !input_right;
-
-        walk_right = input_right && !input_left;
-
-        jump = input_up;
-    }
-
-    //Wall Collision
-    Vector3 CheckWallRays (Vector3 pos, float direction) {
-
-        Vector2 originTop = new Vector2(pos.x + direction *.4f, pos.y + 1f - 0.2f);
-        Vector2 originMiddle = new Vector2(pos.x + direction *.4f, pos.y);
-        Vector2 originBottom = new Vector2(pos.x + direction * .4f, pos.y - 1f + 0.2f);
-
-        RaycastHit2D wallTop = Physics2D.Raycast(originTop, new Vector2 (direction, 0), velocity.x * Time.deltaTime, wallMask);
-        RaycastHit2D wallMiddle = Physics2D.Raycast(originMiddle, new Vector2 (direction, 0), velocity.x * Time.deltaTime, wallMask);
-        RaycastHit2D wallBottom = Physics2D.Raycast(originBottom, new Vector2 (direction, 0), velocity.x * Time.deltaTime, wallMask);
-
-        if (wallTop.collider != null || wallMiddle.collider != null || wallBottom.collider != null) {
-
-            pos.x -= velocity.x * Time.deltaTime * direction;
-        }
-        
-        return pos;
-    }
-    
-    //Ground Collision
-    Vector3 CheckFloorRays(Vector3 pos) {
-
-        Vector2 originLeft = new Vector2 (pos.x - 0.5f + 0.2f, pos.y - 1f);
-        Vector2 originMiddle = new Vector2(pos.x, pos.y - 1f);
-        Vector2 originRight = new Vector2 (pos.x + 0.5f - 0.2f, pos.y - 1f);
-
-        RaycastHit2D floorLeft = Physics2D.Raycast(originLeft, Vector2.down, velocity.y * Time.deltaTime, floorMask);
-        RaycastHit2D floorMiddle = Physics2D.Raycast(originMiddle, Vector2.down, velocity.y * Time.deltaTime, floorMask);
-        RaycastHit2D floorRight = Physics2D.Raycast(originRight, Vector2.down, velocity.y * Time.deltaTime, floorMask);
-
-        if (floorLeft.collider != null || floorMiddle.collider != null || floorRight.collider != null) {
-
-            RaycastHit2D hitRay = floorRight;
-
-            if (floorLeft) {
-                hitRay = floorLeft;
-            }
-            else if (floorMiddle) {
-                hitRay = floorMiddle;
-            }
-            else if (floorRight) {
-                hitRay = floorRight;
-            }
-            
-            playerState = PlayerState.idle;
-
-            grounded = true;
-
-            velocity.y = 0;
-
-            pos.y = hitRay.collider.bounds.center.y + hitRay.collider.bounds.size.y / 2 + 1;
-        }
-         else {
-            if (playerState != PlayerState.jumping) {
-
-                Fall();
-            }
-        }
-
-        return pos;
-    }
-
-    //Ceiling Collision
-    Vector3 CheckCeilingRays(Vector3 pos) {
-        
-        Vector2 originLeft = new Vector2(pos.x - 0.5f + 0.2f, pos.y + 1f);
-        Vector2 originMiddle = new Vector2(pos.x, pos.y + 1f);
-        Vector2 originRight = new Vector2(pos.x + 0.5f - 0.2f, pos.y + 1f);
-
-        RaycastHit2D ceilingLeft = Physics2D.Raycast(originLeft, Vector2.up, velocity.y * Time.deltaTime, floorMask);
-        RaycastHit2D ceilingMiddle = Physics2D.Raycast(originMiddle, Vector2.up, velocity.y * Time.deltaTime, floorMask);
-        RaycastHit2D ceilingRight = Physics2D.Raycast(originRight, Vector2.up, velocity.y * Time.deltaTime, floorMask);
-        
-        if (ceilingLeft.collider != null || ceilingMiddle.collider != null || ceilingRight.collider != null) {
-
-            RaycastHit2D hitRay = ceilingLeft;
-
-            if (ceilingLeft)
+            if (!doubleJump && !grounded)
             {
-                hitRay = ceilingLeft;
+                doubleJump = true;
             }
-            else if (ceilingMiddle)
-            {
-                hitRay = ceilingMiddle;
-            }
-            else if (ceilingRight)
-            {
-                hitRay = ceilingRight;
-            }
-
-            pos.y = hitRay.collider.bounds.center.y - hitRay.collider.bounds.size.y / 2 - 1;
-
-            Fall();
         }
 
-        return pos;
-    
+        if (touchingWall && Input.GetButtonDown("Jump"))
+        {
+            WallJump();
+        }
+
     }
 
-    void Fall () {
-        velocity.y = 0;
+    void WallJump()
+    {
+        rigidbody2D.AddForce(new Vector2(jumpPushForce, jumpForce));
+    }
 
-        playerState = PlayerState.jumping;
 
-        grounded = false;
+    void Flip()
+    {
+
+        // Switch the way the player is labelled as facing
+        facingRight = !facingRight;
+
+        //Multiply the player's x local cale by -1
+        Vector3 theScale = transform.localScale;
+        theScale.x *= -1;
+        transform.localScale = theScale;
     }
 }
