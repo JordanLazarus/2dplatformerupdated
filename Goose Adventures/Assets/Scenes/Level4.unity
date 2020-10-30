@@ -7010,7 +7010,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   GameIsPaused: 0
   pauseMenuUI: {fileID: 741210371}
-  player: {fileID: 0}
+  player: {fileID: 1605716382}
 --- !u!114 &936356114
 MonoBehaviour:
   m_ObjectHideFlags: 0
